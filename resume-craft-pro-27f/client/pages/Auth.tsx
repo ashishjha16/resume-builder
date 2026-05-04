@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { saveAuthUser } from "@/lib/storage";
+import { saveAuthUser, setAdminSession, trackVisitorEvent } from "@/lib/storage";
 import {
   isValidEmail,
   isValidPhone,
@@ -13,11 +13,18 @@ import {
 } from "@/lib/validation";
 import { useToast } from "@/hooks/use-toast";
 
+type AuthView = "user" | "admin";
+
 export default function Auth() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [authView, setAuthView] = useState<AuthView>("user");
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [adminCredentials, setAdminCredentials] = useState({
+    username: "",
+    password: "",
+  });
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -27,6 +34,15 @@ export default function Auth() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  useEffect(() => {
+    trackVisitorEvent({
+      pageVisited: "/auth",
+      action: "Auth page visit",
+      authStatus: "guest",
+      loginSignupStatus: "none",
+    });
+  }, []);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -34,6 +50,20 @@ export default function Auth() {
       [name]: value,
     }));
     // Clear error for this field when user starts typing
+    if (errors[name]) {
+      setErrors((prev) => ({
+        ...prev,
+        [name]: "",
+      }));
+    }
+  };
+
+  const handleAdminInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setAdminCredentials((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
     if (errors[name]) {
       setErrors((prev) => ({
         ...prev,
@@ -89,6 +119,40 @@ export default function Auth() {
     setLoading(true);
 
     try {
+      if (authView === "admin") {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const isValidAdmin =
+          adminCredentials.username === "admin" && adminCredentials.password === "admin";
+
+        if (!isValidAdmin) {
+          setErrors({ admin: "Invalid admin credentials" });
+          trackVisitorEvent({
+            pageVisited: "/auth",
+            action: "Admin login failed",
+            authStatus: "guest",
+            loginSignupStatus: "none",
+            orderOrHistory: "Invalid admin credentials",
+          });
+          setLoading(false);
+          return;
+        }
+
+        setAdminSession(true);
+        trackVisitorEvent({
+          pageVisited: "/auth",
+          action: "Admin login success",
+          authStatus: "guest",
+          loginSignupStatus: "none",
+          orderOrHistory: "Admin session started",
+        });
+        toast({
+          title: "Success",
+          description: "Admin logged in successfully!",
+        });
+        navigate("/admin/dashboard");
+        return;
+      }
+
       // Validate form
       const isValid = isLogin
         ? validateLoginForm()
@@ -111,6 +175,13 @@ export default function Auth() {
       };
 
       saveAuthUser(user);
+      trackVisitorEvent({
+        pageVisited: "/auth",
+        action: isLogin ? "User login success" : "User signup success",
+        authStatus: isLogin ? "logged_in" : "signed_up",
+        loginSignupStatus: isLogin ? "login" : "signup",
+        orderOrHistory: isLogin ? "User logged in" : "User account created",
+      });
 
       toast({
         title: "Success",
@@ -144,6 +215,12 @@ export default function Auth() {
     setErrors({});
   };
 
+  const switchAuthView = (nextView: AuthView) => {
+    setAuthView(nextView);
+    setErrors({});
+    setLoading(false);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-50 p-4">
       <div className="w-full max-w-md">
@@ -174,11 +251,71 @@ export default function Auth() {
 
         {/* Form Card */}
         <div className="bg-white rounded-xl shadow-lg p-8 border border-border">
+          <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg bg-secondary p-1">
+            <button
+              type="button"
+              onClick={() => switchAuthView("user")}
+              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                authView === "user"
+                  ? "bg-white text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              User Login
+            </button>
+            <button
+              type="button"
+              onClick={() => switchAuthView("admin")}
+              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                authView === "admin"
+                  ? "bg-white text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Admin Login
+            </button>
+          </div>
           <h2 className="text-2xl font-bold text-foreground mb-6">
-            {isLogin ? "Welcome Back" : "Create Account"}
+            {authView === "admin" ? "Admin Portal Access" : isLogin ? "Welcome Back" : "Create Account"}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {authView === "admin" ? (
+              <>
+                <div>
+                  <Label htmlFor="username" className="text-sm font-medium">
+                    Username
+                  </Label>
+                  <Input
+                    id="username"
+                    name="username"
+                    type="text"
+                    placeholder="Enter admin username"
+                    value={adminCredentials.username}
+                    onChange={handleAdminInputChange}
+                    disabled={loading}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="adminPassword" className="text-sm font-medium">
+                    Password
+                  </Label>
+                  <Input
+                    id="adminPassword"
+                    name="password"
+                    type="password"
+                    placeholder="Enter admin password"
+                    value={adminCredentials.password}
+                    onChange={handleAdminInputChange}
+                    disabled={loading}
+                  />
+                </div>
+                {errors.admin && (
+                  <p className="text-xs text-destructive mt-1">{errors.admin}</p>
+                )}
+              </>
+            ) : (
+              <>
             {/* Full Name (Register only) */}
             {!isLogin && (
               <div>
@@ -292,6 +429,8 @@ export default function Auth() {
                 )}
               </div>
             )}
+              </>
+            )}
 
             {/* Submit Button */}
             <Button
@@ -302,8 +441,14 @@ export default function Auth() {
               {loading ? (
                 <span className="flex items-center gap-2">
                   <span className="inline-block animate-spin h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full"></span>
-                  {isLogin ? "Signing in..." : "Creating account..."}
+                  {authView === "admin"
+                    ? "Signing in as admin..."
+                    : isLogin
+                    ? "Signing in..."
+                    : "Creating account..."}
                 </span>
+              ) : authView === "admin" ? (
+                "Admin Sign In"
               ) : isLogin ? (
                 "Sign In"
               ) : (
@@ -313,7 +458,8 @@ export default function Auth() {
           </form>
 
           {/* Toggle Auth Mode */}
-          <div className="mt-6 pt-6 border-t border-border text-center">
+          {authView === "user" && (
+            <div className="mt-6 pt-6 border-t border-border text-center">
             <p className="text-sm text-muted-foreground">
               {isLogin ? "Don't have an account? " : "Already have an account? "}
               <button
@@ -325,7 +471,8 @@ export default function Auth() {
                 {isLogin ? "Sign Up" : "Sign In"}
               </button>
             </p>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Info Footer */}

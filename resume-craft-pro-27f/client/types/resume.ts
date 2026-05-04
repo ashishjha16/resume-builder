@@ -75,3 +75,20 @@ export interface AuthUser {
   email: string;
   phone: string;
 }
+
+export interface VisitorHistoryEntry {
+  id: string;
+  visitorId: string;
+  visitorName?: string;
+  email?: string;
+  phone?: string;
+  pageVisited: string;
+  action: string;
+  authStatus: "guest" | "logged_in" | "signed_up";
+  loginSignupStatus?: "login" | "signup" | "none";
+  activityCount?: number;
+  orderOrHistory?: string;
+  visitDate: string;
+  visitTime: string;
+  createdAt: string;
+}

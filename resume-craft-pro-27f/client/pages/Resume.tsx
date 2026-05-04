@@ -3,7 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { getAuthUser, getResumeData, saveResumeData, getDraft, saveDraft } from "@/lib/storage";
+import {
+  getAuthUser,
+  getResumeData,
+  saveResumeData,
+  getDraft,
+  saveDraft,
+  trackVisitorEvent,
+} from "@/lib/storage";
 import { dummyResumeData } from "@/lib/dummyData";
 import type { ResumeData } from "@/types/resume";
 import { PersonalInfoForm } from "@/components/resume/PersonalInfoForm";
@@ -22,7 +29,7 @@ export default function Resume() {
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [activeTab, setActiveTab] = useState("personal");
   const [loading, setLoading] = useState(true);
-  const user = getAuthUser();
+  const [user] = useState(() => getAuthUser());
 
   // Initialize data on mount
   useEffect(() => {
@@ -57,7 +64,7 @@ export default function Resume() {
     };
 
     checkAuth();
-  }, [navigate, user]);
+  }, [navigate, user?.email, user?.phone]);
 
   // Auto-save draft every 30 seconds
   useEffect(() => {
@@ -70,9 +77,26 @@ export default function Resume() {
     return () => clearInterval(interval);
   }, [resumeData]);
 
+  useEffect(() => {
+    if (!user) return;
+    trackVisitorEvent({
+      pageVisited: "/resume",
+      action: "Resume builder page visit",
+      authStatus: "logged_in",
+      loginSignupStatus: "none",
+    });
+  }, [user]);
+
   const handleSave = () => {
     if (resumeData) {
       saveResumeData(resumeData);
+      trackVisitorEvent({
+        pageVisited: "/resume",
+        action: "Resume saved",
+        authStatus: "logged_in",
+        loginSignupStatus: "none",
+        orderOrHistory: "Saved resume data to local storage",
+      });
       toast({
         title: "Success",
         description: "Resume saved successfully!",
@@ -102,6 +126,13 @@ export default function Resume() {
         documents: [],
       };
       setResumeData(newData);
+      trackVisitorEvent({
+        pageVisited: "/resume",
+        action: "Resume form reset",
+        authStatus: "logged_in",
+        loginSignupStatus: "none",
+        orderOrHistory: "Reset form values",
+      });
       toast({
         title: "Reset",
         description: "Form has been reset to empty.",
@@ -111,6 +142,13 @@ export default function Resume() {
 
   const handleLoadDummy = () => {
     setResumeData(dummyResumeData);
+    trackVisitorEvent({
+      pageVisited: "/resume",
+      action: "Loaded sample resume data",
+      authStatus: "logged_in",
+      loginSignupStatus: "none",
+      orderOrHistory: "Loaded dummy data for testing",
+    });
     toast({
       title: "Sample Data Loaded",
       description: "Dummy data has been filled in for testing.",
@@ -118,6 +156,13 @@ export default function Resume() {
   };
 
   const handleLogout = () => {
+    trackVisitorEvent({
+      pageVisited: "/resume",
+      action: "User logout",
+      authStatus: "logged_in",
+      loginSignupStatus: "none",
+      orderOrHistory: "User session cleared",
+    });
     localStorage.removeItem("resumeBuilderUser");
     navigate("/auth");
   };

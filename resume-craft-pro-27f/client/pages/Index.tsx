@@ -1,12 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { getAuthUser } from "@/lib/storage";
-import { useEffect } from "react";
+import { getAuthUser, trackVisitorEvent } from "@/lib/storage";
+import { useEffect, useState } from "react";
 import { FileText, Users, Zap, Shield, Award, BarChart3 } from "lucide-react";
 
 export default function Index() {
   const navigate = useNavigate();
-  const user = getAuthUser();
+  const [user] = useState(() => getAuthUser());
 
   // Redirect to resume if already logged in
   useEffect(() => {
@@ -14,6 +14,15 @@ export default function Index() {
       navigate("/resume");
     }
   }, [user, navigate]);
+
+  useEffect(() => {
+    trackVisitorEvent({
+      pageVisited: "/",
+      action: "Landing page visit",
+      authStatus: user ? "logged_in" : "guest",
+      loginSignupStatus: "none",
+    });
+  }, [user]);
 
   const handleGetStarted = () => {
     navigate("/auth");
